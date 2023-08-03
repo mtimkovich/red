@@ -3,11 +3,11 @@
 //! An `ed` clone, written in Rust.
 
 use anyhow::{anyhow, Result};
+use argh::FromArgs;
 use env_logger;
 use log::debug;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use structopt::StructOpt;
 
 mod commands;
 mod parser;
@@ -17,20 +17,22 @@ mod tokenizer;
 use commands::{Action, Command};
 use red::Red;
 
+#[derive(FromArgs)]
 /// A Rust Editor.
-#[derive(Debug, StructOpt)]
-pub struct Cli {
+struct Cli {
     /// file
+    #[argh(option)]
     path: Option<String>,
+
     /// use STRING as an interactive prompt
-    #[structopt(short = "p", long = "prompt", default_value = "")]
+    #[argh(option, short = 'p', default = "\"\".to_string()")]
     prompt: String,
 }
 
 fn main() -> Result<()> {
     env_logger::init();
 
-    let args = Cli::from_args();
+    let args: Cli = argh::from_env();
     let mut rl = DefaultEditor::new()?;
     let mut ed = Red::new(args.prompt, args.path);
 
