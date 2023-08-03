@@ -1,4 +1,5 @@
-use failure;
+use anyhow::Result;
+use log::debug;
 
 static COMMANDS: &'static [char] = &[
     'p', // print
@@ -27,7 +28,7 @@ pub enum Token<'a> {
     Argument(&'a str),
 }
 
-pub fn tokenize(line: &str) -> Result<Vec<Token>, failure::Error> {
+pub fn tokenize(line: &str) -> Result<Vec<Token>> {
     let mut res = vec![];
 
     let command_idx = line.find(|c: char| COMMANDS.contains(&c));

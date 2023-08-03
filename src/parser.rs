@@ -1,10 +1,9 @@
-use failure;
+use anyhow::{anyhow, bail, Result};
 
-use commands::Address;
-use commands::Command;
-use tokenizer::Token;
+use crate::commands::{Address, Command};
+use crate::tokenizer::Token;
 
-fn parse_address(addr: &str) -> Result<Address, failure::Error> {
+fn parse_address(addr: &str) -> Result<Address> {
     match addr {
         "." => return Ok(Address::CurrentLine),
         "$" => return Ok(Address::LastLine),
@@ -14,17 +13,17 @@ fn parse_address(addr: &str) -> Result<Address, failure::Error> {
     if &addr[0..1] == "+" || &addr[0..1] == "-" {
         let n = addr[0..]
             .parse::<isize>()
-            .map_err(|_| format_err!("Invalid address"))?;
+            .map_err(|_| anyhow!("Invalid address"))?;
         return Ok(Address::Offset(n));
     }
 
     let n = addr
         .parse::<usize>()
-        .map_err(|_| format_err!("Invalid address"))?;
+        .map_err(|_| anyhow!("Invalid address"))?;
     Ok(Address::Numbered(n))
 }
 
-pub fn parse(tokens: &[Token]) -> Result<Command, failure::Error> {
+pub fn parse(tokens: &[Token]) -> Result<Command> {
     if tokens.is_empty() {
         return Ok(Command::Noop);
     }
@@ -105,7 +104,7 @@ pub fn parse(tokens: &[Token]) -> Result<Command, failure::Error> {
         },
         'm' => {
             let suffix = match suffix {
-                None => return Err(format_err!("Invalid target address")),
+                None => bail!("Invalid target address"),
                 Some(suffix) => suffix,
             };
             let dest = parse_address(&suffix)?;

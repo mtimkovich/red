@@ -2,20 +2,11 @@
 //!
 //! An `ed` clone, written in Rust.
 
-extern crate exitfailure;
-extern crate regex;
-extern crate rustyline;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-#[macro_use]
-extern crate structopt;
-
-use exitfailure::ExitFailure;
+use anyhow::{anyhow, Result};
+use env_logger;
+use log::debug;
 use rustyline::error::ReadlineError;
-use rustyline::Editor;
+use rustyline::DefaultEditor;
 use structopt::StructOpt;
 
 mod commands;
@@ -36,11 +27,11 @@ pub struct Cli {
     prompt: String,
 }
 
-fn main() -> Result<(), ExitFailure> {
+fn main() -> Result<()> {
     env_logger::init();
 
     let args = Cli::from_args();
-    let mut rl = Editor::<()>::new();
+    let mut rl = DefaultEditor::new()?;
     let mut ed = Red::new(args.prompt, args.path);
 
     let size = ed.data_size();
@@ -91,7 +82,7 @@ fn main() -> Result<(), ExitFailure> {
             }
             Err(err) => {
                 debug!("Unknown error: {:?}", err);
-                Err(format_err!("Error: {:?}", err))?;
+                Err(anyhow!("Error: {:?}", err))?;
             }
         }
     }

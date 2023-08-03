@@ -5,6 +5,7 @@ version = "0.2.1"
 description = "A Rust Editor - red is a line-oriented text editor, based on the popular ed utility."
 repository = "https://github.com/badboy/red"
 homepage = "https://github.com/badboy/red"
+edition = "2018"
 license = "MIT"
 readme = "README.md"
 
@@ -16,13 +17,12 @@ include = [
 ]
 
 [dependencies]
-env_logger = "0.5.13"
-exitfailure = "0.5.1"
-failure = "0.1.2"
-log = "0.4.5"
-regex = "1.0.5"
-rustyline = "2.0.1"
-structopt = "0.2.10"
+anyhow = "1.0"
+env_logger = "0.10.0"
+log = "0.4.19"
+regex = "1.9.1"
+rustyline = "12.0.0"
+structopt = "0.3"
 
 [[bin]]
 name = "red"

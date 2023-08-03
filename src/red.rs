@@ -1,11 +1,13 @@
+use log::debug;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-use commands::{Action, Command, Mode};
-use failure;
-use parser;
-use tokenizer;
+use crate::commands::{Action, Command, Mode};
+use crate::parser;
+use crate::tokenizer;
+use anyhow::anyhow;
+use anyhow::Result;
 
 #[derive(Debug)]
 pub struct Red {
@@ -46,14 +48,14 @@ impl Red {
         }
     }
 
-    pub fn load_data(&self, path: &str) -> Result<Vec<String>, failure::Error> {
+    pub fn load_data(&self, path: &str) -> Result<Vec<String>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let data = reader.lines().map(|l| l.unwrap()).collect();
         Ok(data)
     }
 
-    pub fn load_file(&mut self, path: String) -> Result<(), failure::Error> {
+    pub fn load_file(&mut self, path: String) -> Result<()> {
         let data = self.load_data(&path)?;
         let len = data.len();
         self.path = Some(path);
@@ -71,9 +73,9 @@ impl Red {
         self.data.len()
     }
 
-    pub fn set_line(&mut self, line: usize) -> Result<(), failure::Error> {
+    pub fn set_line(&mut self, line: usize) -> Result<()> {
         if line < 1 || line > self.lines() {
-            Err(format_err!("Invalid address"))
+            Err(anyhow!("Invalid address"))
         } else {
             self.current_line = line;
             Ok(())
@@ -88,7 +90,7 @@ impl Red {
         }
     }
 
-    fn parse_command(&self, line: &str) -> Result<Command, failure::Error> {
+    fn parse_command(&self, line: &str) -> Result<Command> {
         let tokens = tokenizer::tokenize(line)?;
         debug!("tokens: {:#?}", tokens);
         let command = parser::parse(&tokens)?;
@@ -97,12 +99,12 @@ impl Red {
         Ok(command)
     }
 
-    fn dispatch_command(&mut self, line: &str) -> Result<Action, failure::Error> {
+    fn dispatch_command(&mut self, line: &str) -> Result<Action> {
         let command = self.parse_command(line.trim())?;
         command.execute(self)
     }
 
-    fn dispatch_input(&mut self, line: &str) -> Result<Action, failure::Error> {
+    fn dispatch_input(&mut self, line: &str) -> Result<Action> {
         if line == "." {
             self.mode = Mode::Command;
             return Ok(Action::Continue);
@@ -121,7 +123,7 @@ impl Red {
         Ok(Action::Continue)
     }
 
-    pub fn dispatch(&mut self, line: &str) -> Result<Action, failure::Error> {
+    pub fn dispatch(&mut self, line: &str) -> Result<Action> {
         match self.mode {
             Mode::Command => self.dispatch_command(line),
             Mode::Input => self.dispatch_input(line),

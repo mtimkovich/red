@@ -1,9 +1,10 @@
-use failure;
+use crate::Red;
+use anyhow::{anyhow, bail, Result};
+use log::debug;
 use regex::Regex;
 use std::cmp;
 use std::fs::{self, File};
 use std::io::{self, Write};
-use Red;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Address {
@@ -83,7 +84,7 @@ pub enum Command {
 }
 
 impl Command {
-    pub fn execute(self, ed: &mut Red) -> Result<Action, failure::Error> {
+    pub fn execute(self, ed: &mut Red) -> Result<Action> {
         debug!("Command::execute: {:?}", self);
         use Command::*;
 
@@ -106,7 +107,7 @@ impl Command {
         }
     }
 
-    fn noop(ed: &mut Red) -> Result<Action, failure::Error> {
+    fn noop(ed: &mut Red) -> Result<Action> {
         if ed.current_line < ed.lines() {
             ed.current_line += 1;
             Self::print(ed, None, None)
@@ -115,23 +116,23 @@ impl Command {
         }
     }
 
-    fn help(ed: &mut Red) -> Result<Action, failure::Error> {
+    fn help(ed: &mut Red) -> Result<Action> {
         if let Some(error) = ed.last_error.as_ref() {
             println!("{}", error);
         }
         Ok(Action::Continue)
     }
 
-    fn quit(ed: &mut Red, force: bool) -> Result<Action, failure::Error> {
+    fn quit(ed: &mut Red, force: bool) -> Result<Action> {
         if !force && ed.dirty {
             ed.dirty = false;
-            Err(format_err!("Warning: buffer modified"))
+            Err(anyhow!("Warning: buffer modified"))
         } else {
             Ok(Action::Quit)
         }
     }
 
-    fn jump(ed: &mut Red, addr: Address) -> Result<Action, failure::Error> {
+    fn jump(ed: &mut Red, addr: Address) -> Result<Action> {
         use self::Address::*;
         match addr {
             CurrentLine => { /* Don't jump at all */ }
@@ -143,7 +144,7 @@ impl Command {
             Offset(n) => {
                 let new_line = ed.current_line as isize + n;
                 if new_line < 1 {
-                    return Err(format_err!("Invalid address"));
+                    bail!("Invalid address");
                 }
                 ed.set_line(new_line as usize)?;
             }
@@ -153,33 +154,21 @@ impl Command {
         Self::print(ed, None, None)
     }
 
-    fn print(
-        ed: &mut Red,
-        start: Option<Address>,
-        end: Option<Address>,
-    ) -> Result<Action, failure::Error> {
+    fn print(ed: &mut Red, start: Option<Address>, end: Option<Address>) -> Result<Action> {
         let stdout = io::stdout();
         let handle = stdout.lock();
         Self::write_range(handle, ed, start, end, false)
     }
 
-    fn numbered(
-        ed: &mut Red,
-        start: Option<Address>,
-        end: Option<Address>,
-    ) -> Result<Action, failure::Error> {
+    fn numbered(ed: &mut Red, start: Option<Address>, end: Option<Address>) -> Result<Action> {
         let stdout = io::stdout();
         let handle = stdout.lock();
         Self::write_range(handle, ed, start, end, true)
     }
 
-    fn delete(
-        ed: &mut Red,
-        start: Option<Address>,
-        end: Option<Address>,
-    ) -> Result<Action, failure::Error> {
+    fn delete(ed: &mut Red, start: Option<Address>, end: Option<Address>) -> Result<Action> {
         if ed.data.is_empty() {
-            return Err(format_err!("Invalid address"));
+            bail!("Invalid address");
         }
 
         match (start, end) {
@@ -228,7 +217,7 @@ impl Command {
         mut start: Option<Address>,
         mut end: Option<Address>,
         file: Option<String>,
-    ) -> Result<Action, failure::Error> {
+    ) -> Result<Action> {
         let file = file.or_else(|| ed.path.clone());
         match file {
             None => Ok(Action::Unknown),
@@ -254,7 +243,7 @@ impl Command {
         }
     }
 
-    fn insert(ed: &mut Red, before: Option<Address>) -> Result<Action, failure::Error> {
+    fn insert(ed: &mut Red, before: Option<Address>) -> Result<Action> {
         let mut addr = before
             .map(|addr| Self::get_actual_line(&ed, addr))
             .unwrap_or_else(|| Ok(ed.current_line))?;
@@ -267,7 +256,7 @@ impl Command {
         Ok(Action::Continue)
     }
 
-    fn append(ed: &mut Red, after: Option<Address>) -> Result<Action, failure::Error> {
+    fn append(ed: &mut Red, after: Option<Address>) -> Result<Action> {
         let addr = after
             .map(|addr| Self::get_actual_line(&ed, addr))
             .unwrap_or_else(|| Ok(ed.current_line))?;
@@ -276,11 +265,11 @@ impl Command {
         Ok(Action::Continue)
     }
 
-    fn edit(ed: &mut Red, file: Option<String>) -> Result<Action, failure::Error> {
+    fn edit(ed: &mut Red, file: Option<String>) -> Result<Action> {
         let file = file.or_else(|| ed.path.clone());
 
         let file = match file {
-            None => return Err(format_err!("No current filename")),
+            None => bail!("No current filename"),
             Some(file) => file,
         };
         ed.load_file(file)?;
@@ -288,11 +277,7 @@ impl Command {
         Ok(Action::Continue)
     }
 
-    fn change(
-        ed: &mut Red,
-        start: Option<Address>,
-        end: Option<Address>,
-    ) -> Result<Action, failure::Error> {
+    fn change(ed: &mut Red, start: Option<Address>, end: Option<Address>) -> Result<Action> {
         Self::delete(ed, start, end)?;
         let mut addr = ed.current_line;
         if addr > 0 {
@@ -304,15 +289,11 @@ impl Command {
         Ok(Action::Continue)
     }
 
-    fn read(
-        ed: &mut Red,
-        after: Option<Address>,
-        file: Option<String>,
-    ) -> Result<Action, failure::Error> {
+    fn read(ed: &mut Red, after: Option<Address>, file: Option<String>) -> Result<Action> {
         let file = file.or_else(|| ed.path.clone());
 
         let file = match file {
-            None => return Err(format_err!("No current filename")),
+            None => bail!("No current filename"),
             Some(file) => file,
         };
         let data = ed.load_data(&file)?;
@@ -344,7 +325,7 @@ impl Command {
         start: Option<Address>,
         end: Option<Address>,
         dest: Address,
-    ) -> Result<Action, failure::Error> {
+    ) -> Result<Action> {
         if ed.data.is_empty() {
             return Ok(Action::Continue);
         }
@@ -357,7 +338,7 @@ impl Command {
                 let line_no = ed.current_line;
                 debug!("Moving line {} to {}", line_no, dest);
                 if line_no == dest {
-                    return Err(format_err!("Invalid destination"));
+                    bail!("Invalid destination");
                 }
                 let line = ed.data.remove(line_no - 1);
                 if dest > line_no {
@@ -373,7 +354,7 @@ impl Command {
                 let line_no = Self::get_actual_line(&ed, start)?;
                 debug!("Moving line {} to {}", line_no, dest);
                 if line_no == dest {
-                    return Err(format_err!("Invalid destination"));
+                    bail!("Invalid destination");
                 }
                 let line = ed.data.remove(line_no - 1);
                 if dest > line_no {
@@ -391,7 +372,7 @@ impl Command {
                 debug!("Moving lines 1..{} to {}", end, dest);
 
                 if dest <= end {
-                    return Err(format_err!("Invalid destination"));
+                    bail!("Invalid destination");
                 }
 
                 for _ in 1..=end {
@@ -415,7 +396,7 @@ impl Command {
                 debug!("Moving lines {}..{} to {}", start, end, dest);
 
                 if dest >= start && dest <= end {
-                    return Err(format_err!("Invalid destination"));
+                    bail!("Invalid destination");
                 }
 
                 for _ in start..=end {
@@ -443,18 +424,18 @@ impl Command {
         start: Option<Address>,
         end: Option<Address>,
         arg: Option<String>,
-    ) -> Result<Action, failure::Error> {
+    ) -> Result<Action> {
         let arg = match arg {
-            None => return Err(format_err!("No previous substitution")),
+            None => bail!("No previous substitution"),
             Some(arg) => arg,
         };
 
         if &arg[0..=0] != "/" {
-            return Err(format_err!("Missing pattern delimiter"));
+            bail!("Missing pattern delimiter");
         }
         let arg = &arg[1..];
         let regex_end = match arg.find(|c| c == '/') {
-            None => return Err(format_err!("Missing pattern delimiter")),
+            None => bail!("Missing pattern delimiter"),
             Some(idx) => idx,
         };
         let re = &arg[..regex_end];
@@ -473,7 +454,7 @@ impl Command {
         debug!("Replacement: {:?}", replacement);
         debug!("Flags: {:?}", flags);
 
-        let re = Regex::new(re).map_err(|_| format_err!("No match"))?;
+        let re = Regex::new(re).map_err(|_| anyhow!("No match"))?;
         let all = flags.chars().any(|c| c == 'g');
 
         let mut start = start
@@ -484,7 +465,7 @@ impl Command {
             .unwrap_or_else(|| Ok(ed.current_line))?;
 
         if start == 0 {
-            return Err(format_err!("Invalid address"));
+            bail!("Invalid address");
         }
         start -= 1;
         debug!("Replacement in range: {}..{}", start, end);
@@ -514,7 +495,7 @@ impl Command {
             ed.set_line(idx)?;
             Self::print(ed, None, None)
         } else {
-            Err(format_err!("No match"))
+            Err(anyhow!("No match"))
         }
     }
 
@@ -524,9 +505,9 @@ impl Command {
         start: Option<Address>,
         end: Option<Address>,
         show_number: bool,
-    ) -> Result<Action, failure::Error> {
+    ) -> Result<Action> {
         if ed.data.is_empty() {
-            return Err(format_err!("Invalid address"));
+            bail!("Invalid address");
         }
 
         match (start, end) {
@@ -577,26 +558,26 @@ impl Command {
         Ok(Action::Continue)
     }
 
-    fn get_actual_line(ed: &Red, addr: Address) -> Result<usize, failure::Error> {
+    fn get_actual_line(ed: &Red, addr: Address) -> Result<usize> {
         use self::Address::*;
         match addr {
             CurrentLine => Ok(ed.current_line),
             LastLine => Ok(ed.lines()),
             Numbered(n) => {
                 if n > ed.lines() {
-                    return Err(format_err!("Invalid address"));
+                    bail!("Invalid address");
                 }
                 Ok(n)
             }
             Offset(n) => {
                 let line = ed.current_line as isize + n;
                 if line < 1 {
-                    return Err(format_err!("Invalid address"));
+                    bail!("Invalid address");
                 }
 
                 let line = line as usize;
                 if line > ed.lines() {
-                    return Err(format_err!("Invalid address"));
+                    bail!("Invalid address");
                 }
 
                 Ok(line)
